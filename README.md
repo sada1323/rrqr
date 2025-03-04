@@ -35,8 +35,8 @@
         }
         #qr-container { 
             width: 100%; 
-            max-width: 300px; 
-            height: 300px; 
+            max-width: 600px; 
+            height: 600px; 
             margin: 20px 0; 
         }
         #scanner-container { 
@@ -44,7 +44,7 @@
             width: 100%; 
             max-width: 400px; 
             height: 0; 
-            padding-bottom: 75%; /* Соотношение сторон 4:3 */
+            padding-bottom: 75%; 
             margin: 20px 0;
         }
         #scanner-video { 
@@ -62,7 +62,6 @@
             font-weight: bold; 
             text-align: center;
         }
-        /* Адаптивные стили для мобильных */
         @media (max-width: 768px) {
             #qr-container, #scanner-container {
                 max-width: 100%;
@@ -75,72 +74,35 @@
     </style>
 </head>
 <body>
-    <div class="tabs">
-        <div class="tab active" onclick="showTab('generate')">Создать QR</div>
-        <div class="tab" onclick="showTab('scan')">Сканировать QR</div>
-    </div>
-
-    <div id="generate" class="tab-content active">
-        <input type="text" id="qrInput" placeholder="Введите текст для QR" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-        <button onclick="generateQR()">Создать QR</button>
-        <div id="qr-container"></div>
-    </div>
-
-    <div id="scan" class="tab-content">
-        <button onclick="startScanner()">Включить камеру</button>
-        <div id="scanner-container">
-            <video id="scanner-video" autoplay></video>
-            <canvas id="scanner-canvas" style="display: none;"></canvas>
-        </div>
-        <div id="result"></div>
-    </div>
+    <!-- ... (структура интерфейса остается без изменений) ... -->
 
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.3.2/dist/jsQR.min.js"></script>
     <script>
-        let mediaStream;
-        let scannerInterval;
-        const video = document.getElementById('scanner-video');
-        const canvas = document.getElementById('scanner-canvas');
-        const ctx = canvas.getContext('2d');
-
-        // Функция для адаптивного изменения размеров canvas
-        function resizeCanvas() {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            // Убедимся, что canvas масштабируется правильно
-            const scannerContainer = document.getElementById('scanner-container');
-            scannerContainer.style.paddingBottom = (video.videoHeight / video.videoWidth) * 100 + '%';
-        }
-
-        function showTab(tabName) {
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            document.querySelector(`.tab[onclick*="${tabName}"]`).classList.add('active');
-            document.getElementById(tabName).classList.add('active');
-        }
+        // ... (все переменные и функции остаются без изменений) ...
 
         async function generateQR() {
             const inputText = document.getElementById('qrInput').value;
             if (!inputText) return alert('Введите текст для генерации');
 
-            const qr = qrcode(0, 'M');
+            const qr = qrcode(0, 'H'); // Высокий уровень коррекции ошибок
             qr.addData(inputText);
             qr.make();
 
             const qrContainer = document.getElementById('qr-container');
-            qrContainer.innerHTML = qr.createImgTag();
+            qrContainer.innerHTML = qr.createImgTag({ 
+                ecLevel: 'H', // Уровень коррекции ошибок (H — высокий)
+                size: 200 // Размер изображения в пикселях (можно увеличить)
+            });
         }
 
         async function startScanner() {
             try {
-                // Запрос доступа к камере (задняя камера)
                 const constraints = {
                     video: {
                         facingMode: 'environment', // Камера задней стороны
-                        width: { min: 640 }, // Минимальная ширина
-                        height: { min: 480 } // Минимальная высота
+                        width: { min: 640 },
+                        height: { min: 480 }
                     }
                 };
 
@@ -148,48 +110,40 @@
                 video.srcObject = mediaStream;
                 video.play();
 
-                // Обновляем размеры canvas при изменении размеров видео
                 video.addEventListener('play', () => {
-                    resizeCanvas();
-                    // Учет поворота камеры на мобильных устройствах
-                    const orientation = video.videoWidth > video.videoHeight ? 90 : 0;
-                    if (orientation > 0) {
-                        canvas.width = video.videoHeight;
-                        canvas.height = video.videoWidth;
-                    }
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    console.log('Canvas size:', canvas.width, 'x', canvas.height);
+                    console.log('Video size:', video.videoWidth, 'x', video.videoHeight);
                 });
-
-                // Обновляем размеры canvas при изменении ориентации устройства
-                window.addEventListener('resize', resizeCanvas);
 
                 scannerInterval = setInterval(() => {
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     let code = jsQR(imageData.data, imageData.width, imageData.height);
 
-                    // Если QR не найден, попробуем повернуть изображение на 180 градусов (для мобильных)
+                    // Попытка повернуть изображение на 90, 180, 270 градусов
                     if (!code) {
-                        // Поворот изображения на 180 градусов
-                        const rotatedData = new Uint8ClampedArray(imageData.data.length);
-                        const width = imageData.width;
-                        const height = imageData.height;
-                        for (let y = 0; y < height; y++) {
-                            for (let x = 0; x < width; x++) {
-                                const srcIndex = (y * width + x) * 4;
-                                const dstIndex = ((height - 1 - y) * width + (width - 1 - x)) * 4;
-                                rotatedData[dstIndex] = imageData.data[srcIndex];
-                                rotatedData[dstIndex + 1] = imageData.data[srcIndex + 1];
-                                rotatedData[dstIndex + 2] = imageData.data[srcIndex + 2];
-                                rotatedData[dstIndex + 3] = imageData.data[srcIndex + 3];
-                            }
+                        // Поворот на 90 градусов
+                        const rotatedData90 = rotateImage(imageData.data, imageData.width, imageData.height, 90);
+                        code = jsQR(rotatedData90, imageData.height, imageData.width);
+
+                        if (!code) {
+                            // Поворот на 180 градусов
+                            const rotatedData180 = rotateImage(imageData.data, imageData.width, imageData.height, 180);
+                            code = jsQR(rotatedData180, imageData.width, imageData.height);
                         }
-                        code = jsQR(rotatedData, width, height);
                     }
 
+                    // Вывод отладочной информации
+                    console.log('Processing frame...');
                     if (code) {
+                        console.log('QR detected:', code.data);
                         clearInterval(scannerInterval);
                         mediaStream.getTracks().forEach(track => track.stop());
                         document.getElementById('result').innerText = `Результат: ${code.data}`;
+                    } else {
+                        console.log('No QR detected');
                     }
                 }, 150); // Уменьшен интервал для мобильных устройств
             } catch (error) {
@@ -198,12 +152,25 @@
             }
         }
 
-        // Уничтожаем поток при выходе из приложения
-        window.addEventListener('beforeunload', () => {
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-            }
-        });
+        // Функция для поворота изображения
+        function rotateImage(data, width, height, angle) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+            ctx.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
+
+            const rotatedCanvas = document.createElement('canvas');
+            const rotatedCtx = rotatedCanvas.getContext('2d');
+
+            rotatedCanvas.width = height;
+            rotatedCanvas.height = width;
+            rotatedCtx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+            rotatedCtx.rotate(angle * Math.PI / 180);
+            rotatedCtx.drawImage(canvas, -(width / 2), -(height / 2));
+
+            return rotatedCtx.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height).data;
+        }
     </script>
 </body>
 </html>
